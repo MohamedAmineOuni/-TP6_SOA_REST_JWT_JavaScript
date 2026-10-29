@@ -1,0 +1,202 @@
+
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Client REST JavaScript - JWT</title>
+</head>
+<body>
+
+<h2>Client REST JavaScript - JWT</h2>
+
+<h3>Authentification</h3>
+
+<label>Username :</label>
+<input type="text" id="username">
+
+<br><br>
+
+<label>Password :</label>
+<input type="password" id="password">
+
+<br><br>
+
+<button onclick="login()">Se connecter</button>
+
+<p id="message"></p>
+
+<hr>
+
+<h3>Tester le service Options</h3>
+
+<label>Domaine :</label>
+<input type="text" id="domaine" value="Informatique">
+
+<button onclick="getOptions()">OK</button>
+
+<br><br>
+
+<label>Code :</label>
+<input type="text" id="code" readonly>
+
+<br><br>
+
+<label>Titre :</label>
+<input type="text" id="libelle" readonly>
+
+<br><br>
+
+<label>Responsable :</label>
+<input type="text" id="responsable" readonly>
+
+<script>
+    var API = "http://localhost:8080/Gestion_Options_Etudiants_war_exploded/rest";
+
+    var accessToken = null;
+    var refreshToken = null;
+
+    function newRequest() {
+        return new XMLHttpRequest();
+    }
+
+    function login() {
+        var username = document.getElementById("username").value;
+        var password = document.getElementById("password").value;
+
+        var xmlhttp = newRequest();
+
+        xmlhttp.open("POST", API + "/authentication", true);
+        xmlhttp.setRequestHeader("Content-Type", "application/json");
+
+        xmlhttp.onreadystatechange = function() {
+            if (xmlhttp.readyState == 4) {
+                if (xmlhttp.status == 200) {
+                    var tokens = JSON.parse(xmlhttp.responseText);
+
+                    accessToken = tokens.accessToken;
+                    refreshToken = tokens.refreshToken;
+
+                    document.getElementById("message").textContent =
+                        "Connexion réussie !";
+                } else {
+                    document.getElementById("message").textContent =
+                        "Erreur de connexion : " + xmlhttp.status;
+                }
+            }
+        };
+
+        xmlhttp.send(JSON.stringify({
+            username: username,
+            password: password
+        }));
+    }
+
+    function getOptions(retried) {
+        if (!accessToken) {
+            alert("Veuillez vous connecter !");
+            return;
+        }
+
+        var domaine = document.getElementById("domaine").value;
+
+        var xmlhttp = newRequest();
+
+        var url = API + "/options?domaine=" +
+            encodeURIComponent(domaine);
+
+        xmlhttp.open("GET", url, true);
+
+        xmlhttp.setRequestHeader(
+            "Authorization",
+            "Bearer " + accessToken
+        );
+
+        xmlhttp.onreadystatechange = function() {
+            if (xmlhttp.readyState == 4) {
+                if (xmlhttp.status == 200) {
+                    var resultat = JSON.parse(xmlhttp.responseText);
+
+                    document.getElementById("code").value = "";
+                    document.getElementById("libelle").value = "";
+                    document.getElementById("responsable").value = "";
+
+                    for (var i in resultat) {
+                        document.getElementById("code").value +=
+                            " " + resultat[i].codeOption;
+
+                        document.getElementById("libelle").value +=
+                            " " + resultat[i].libelle;
+
+                        document.getElementById("responsable").value +=
+                            " " + resultat[i].responsable;
+                    }
+
+                    document.getElementById("message").textContent =
+                        "Options récupérées avec succès !";
+
+                } else if (xmlhttp.status == 401) {
+                    if (!retried) {
+                        refreshAndRetry();
+                    } else {
+                        document.getElementById("message").textContent =
+                            "Accès refusé après renouvellement du JWT.";
+                    }
+                } else {
+                    alert("Erreur : " + xmlhttp.status);
+                }
+            }
+        };
+
+        xmlhttp.send(null);
+    }
+
+    function refreshAndRetry() {
+        if (!refreshToken) {
+            alert("Session expirée. Veuillez vous reconnecter.");
+            return;
+        }
+
+        var xmlhttp = newRequest();
+
+        xmlhttp.open(
+            "POST",
+            API + "/authentication/refresh",
+            true
+        );
+
+        xmlhttp.setRequestHeader(
+            "Content-Type",
+            "application/x-www-form-urlencoded"
+        );
+
+        xmlhttp.onreadystatechange = function() {
+            if (xmlhttp.readyState == 4) {
+                if (xmlhttp.status == 200) {
+                    var tokens = JSON.parse(xmlhttp.responseText);
+
+                    accessToken = tokens.accessToken;
+                    refreshToken = tokens.refreshToken;
+
+                    document.getElementById("message").textContent =
+                        "JWT renouvelé avec succès !";
+
+                    getOptions(true);
+
+                } else {
+                    accessToken = null;
+                    refreshToken = null;
+
+                    document.getElementById("message").textContent =
+                        "Session expirée. Veuillez vous reconnecter.";
+                }
+            }
+        };
+
+        xmlhttp.send(
+            "refreshToken=" + encodeURIComponent(refreshToken)
+        );
+    }
+</script>
+
+</body>
+</html>
